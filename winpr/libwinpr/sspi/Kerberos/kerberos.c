@@ -332,12 +332,12 @@ cleanup:
 	return ret;
 }
 
-static int init_creds(LPCWSTR username, size_t username_len, LPCWSTR password, size_t password_len)
+static int init_creds(LPCWSTR username, size_t username_len, LPCWSTR password, size_t password_len, LPCWSTR domain, size_t domain_len)
 {
 	krb5_error_code ret = 0;
 	krb5_context ctx = NULL;
 	krb5_principal principal = NULL;
-	char* krb_name = NULL;
+//	char* krb_name = NULL;
 	char* lusername = NULL;
 	char* lrealm = NULL;
 	char* lpassword = NULL;
@@ -363,6 +363,24 @@ static int init_creds(LPCWSTR username, size_t username_len, LPCWSTR password, s
 		goto cleanup;
 	}
 
+	status = ConvertFromUnicode(CP_UTF8, 0, domain,
+								domain_len, &lrealm, 0, NULL, NULL);
+
+	if (status <= 0)
+	{
+		ret = -1;
+		WLog_ERR(TAG, "Failed to convert domain");
+		goto cleanup;
+	}
+
+	WLog_INFO(TAG, "init krb5 creds for %s domain %s", lusername, lrealm);
+
+	if (lrealm == NULL || strlen(lrealm) == 0) {
+		ret = -1;
+		WLog_ERR(TAG, "domain does not contain realm! Kerberos will not be used.");
+		goto cleanup;
+	}
+
 	/* Could call krb5_init_secure_context, but it disallows user overrides */
 	ret = krb5_init_context(&ctx);
 
@@ -372,42 +390,43 @@ static int init_creds(LPCWSTR username, size_t username_len, LPCWSTR password, s
 		goto cleanup;
 	}
 
-	ret = krb5_get_default_realm(ctx, &lrealm);
+//	bastion customization, here we opt to infer realm at runtime
+	ret = krb5_set_default_realm(ctx, &lrealm);
 
 	if (ret)
 	{
-		WLog_WARN(TAG, "could not get Kerberos default realm");
+		WLog_WARN(TAG, "could not set Kerberos default realm");
 		goto cleanup;
 	}
 
 	lrealm_len = strlen(lrealm);
 	lusername_len = strlen(lusername);
-	krb_name_len = lusername_len + lrealm_len + 1; // +1 for '@'
-	krb_name = calloc(krb_name_len + 1, sizeof(char));
+//	krb_name_len = lusername_len + lrealm_len + 1; // +1 for '@'
+//	krb_name = calloc(krb_name_len + 1, sizeof(char));
+//
+//	if (!krb_name)
+//	{
+//		WLog_ERR(TAG, "could not allocate memory for string rep of principal\n");
+//		ret = -1;
+//		goto cleanup;
+//	}
 
-	if (!krb_name)
-	{
-		WLog_ERR(TAG, "could not allocate memory for string rep of principal\n");
-		ret = -1;
-		goto cleanup;
-	}
-
-	/* Set buffer */
-	_snprintf(krb_name, krb_name_len + 1, "%s@%s", lusername, lrealm);
-#ifdef WITH_DEBUG_NLA
-	WLog_DBG(TAG, "copied string is %s\n", krb_name);
-#endif
+//	/* Set buffer */
+//	_snprintf(krb_name, krb_name_len + 1, "%s@%s", lusername, lrealm);
+//#ifdef WITH_DEBUG_NLA
+//	WLog_DBG(TAG, "copied string is %s\n", krb_name);
+//#endif
 	pstr = strchr(lusername, '@');
 
-	if (pstr != NULL)
-		flags = KRB5_PRINCIPAL_PARSE_ENTERPRISE;
+//	if (pstr != NULL)
+//		flags = KRB5_PRINCIPAL_PARSE_ENTERPRISE;
 
 	/* Use the specified principal name. */
-	ret = krb5_parse_name_flags(ctx, krb_name, flags, &principal);
+	ret = krb5_parse_name_flags(ctx, lusername, flags, &principal);
 
 	if (ret)
 	{
-		WLog_ERR(TAG, "could not convert %s to principal", krb_name);
+		WLog_ERR(TAG, "could not convert %s to principal", lusername);
 		goto cleanup;
 	}
 
@@ -423,8 +442,8 @@ cleanup:
 	free(lusername);
 	free(lpassword);
 
-	if (krb_name)
-		free(krb_name);
+//	if (krb_name)
+//		free(krb_name);
 
 	if (lrealm)
 		krb5_free_default_realm(ctx, lrealm);
@@ -500,8 +519,12 @@ static SECURITY_STATUS SEC_ENTRY kerberos_InitializeSecurityContextA(
 				if (init_creds(context->credentials->identity.User,
 				               context->credentials->identity.UserLength,
 				               context->credentials->identity.Password,
-				               context->credentials->identity.PasswordLength))
+				               context->credentials->identity.PasswordLength,
+                               context->credentials->identity.Domain,
+                               context->credentials->identity.DomainLength))
 					return SEC_E_NO_CREDENTIALS;
+                else
+                    WLog_INFO(TAG, "Authenticated to Kerberos v5 via login/password context->target_name = %s", context->target_name);
 
 				WLog_INFO(TAG, "Authenticated to Kerberos v5 via login/password");
 				/* retry GSSAPI call */
@@ -516,8 +539,11 @@ static SECURITY_STATUS SEC_ENTRY kerberos_InitializeSecurityContextA(
 				{
 					/* We can't use Kerberos */
 					WLog_ERR(TAG, "Init GSS security context failed : can't use Kerberos");
-					return SEC_E_INTERNAL_ERROR;
+                    WLog_ERR(TAG, "SSPI_GSS_ERROR while authenticating Kerberos v5 via login/password = %08X, minor status = %08X", context->major_status, context->minor_status);
+                    return SEC_E_INTERNAL_ERROR;
 				}
+
+                WLog_INFO(TAG, "[kerberos_InitializeSecurityContextA] sspi_gss_init_sec_context finished with = %08X, minor status = %08X", context->major_status, context->minor_status);
 			}
 		}
 
