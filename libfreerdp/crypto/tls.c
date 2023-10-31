@@ -621,6 +621,7 @@ static SecPkgContext_Bindings* tls_get_channel_bindings(X509* cert)
 	/* See https://www.rfc-editor.org/rfc/rfc5929 for details about hashes */
 	WINPR_MD_TYPE alg = crypto_cert_get_signature_alg(cert);
 	const char* hash;
+	WLog_INFO(TAG, "Alg is %s", alg);
 	switch (alg)
 	{
 
@@ -632,24 +633,33 @@ static SecPkgContext_Bindings* tls_get_channel_bindings(X509* cert)
 			hash = winpr_md_type_to_string(alg);
 			break;
 	}
-	if (!hash)
+	if (!hash) {
+		WLog_WARN(TAG, "Hash is null");
 		return NULL;
+	}
 
 	BYTE* CertificateHash = crypto_cert_hash(cert, hash, &CertificateHashLength);
 	if (!CertificateHash)
+	{
+		WLog_WARN(TAG, "CertificateHash is null");
 		return NULL;
+	}
 
 	ChannelBindingTokenLength = PrefixLength + CertificateHashLength;
 	ContextBindings = (SecPkgContext_Bindings*)calloc(1, sizeof(SecPkgContext_Bindings));
 
-	if (!ContextBindings)
+	if (!ContextBindings){
+		WLog_WARN(TAG, "ContextBindings is null");
 		goto out_free;
+	}
 
 	ContextBindings->BindingsLength = sizeof(SEC_CHANNEL_BINDINGS) + ChannelBindingTokenLength;
 	ChannelBindings = (SEC_CHANNEL_BINDINGS*)calloc(1, ContextBindings->BindingsLength);
 
-	if (!ChannelBindings)
+	if (!ChannelBindings) {
+		WLog_WARN(TAG, "ChannelBindings is null");
 		goto out_free;
+	}
 
 	ContextBindings->Bindings = ChannelBindings;
 	ChannelBindings->cbApplicationDataLength = ChannelBindingTokenLength;
