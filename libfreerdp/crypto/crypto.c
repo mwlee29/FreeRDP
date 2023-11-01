@@ -961,6 +961,7 @@ WINPR_MD_TYPE crypto_cert_get_signature_alg(X509* xcert)
 		return WINPR_MD_NONE;
 	}
 
+	WLog_INFO(TAG, "hash_nid is %s", hash_nid);
 	switch (hash_nid)
 	{
 		case NID_md2:
