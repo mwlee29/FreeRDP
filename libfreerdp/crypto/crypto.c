@@ -951,7 +951,6 @@ WINPR_MD_TYPE crypto_cert_get_signature_alg(X509* xcert)
 	WLog_INFO(TAG, "Asserting xcert");
 	WINPR_ASSERT(xcert);
 
-	WLog_INFO(TAG, "xcert is %s", xcert);
 	const int nid = X509_get_signature_nid(xcert);
 
 	WLog_INFO(TAG, "nid is %s", nid);
