@@ -948,13 +948,18 @@ out_free_issuer:
 
 WINPR_MD_TYPE crypto_cert_get_signature_alg(X509* xcert)
 {
+	WLog_INFO(TAG, "Asserting xcert");
 	WINPR_ASSERT(xcert);
 
+	WLog_INFO(TAG, "xcert is %s", xcert);
 	const int nid = X509_get_signature_nid(xcert);
 
+	WLog_INFO(TAG, "nid is %s", nid);
 	int hash_nid = 0;
-	if (OBJ_find_sigid_algs(nid, &hash_nid, NULL) != 1)
+	if (OBJ_find_sigid_algs(nid, &hash_nid, NULL) != 1) {
+		WLog_WARN(TAG, "OBJ_find_sigid_algs is not 1 - returning WINPR_MD_NONE");
 		return WINPR_MD_NONE;
+	}
 
 	switch (hash_nid)
 	{
